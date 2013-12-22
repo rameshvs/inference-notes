@@ -1,0 +1,495 @@
+\documentclass[12pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{epsfig}
+\usepackage{amsfonts}
+\usepackage[mathcal]{euscript}
+\usepackage[tbtags]{amsmath}
+\usepackage{amssymb}
+\usepackage{mathrsfs}
+\usepackage{import}
+\usepackage{hyperref}
+\usepackage{enumerate}
+\usepackage{algorithm}
+\usepackage{algorithmicx}
+\usepackage[noend]{algpseudocode}
+\usepackage{bbm}
+\usepackage{subfig}
+
+\input{../defs.tex}
+
+\DeclareMathOperator*{\argmax}{\mathrm{argmax}}
+\renewcommand{\P}{\mathbb{P}}
+\newcommand{\E}[1]{\mathbb{E}\left[#1\right]}
+\newcommand{\bunderline}[2][4]{\underline{#2\mkern-#1mu}\mkern#1mu}
+\newcommand{\phat}{\widehat{p}_X}
+\newcommand{\N}{\mathcal{N}}
+\newcommand{\indicator}{\mathbbm{1}}
+
+\algrenewcommand\algorithmicrequire{\textbf{Inputs:}}
+
+\title{Gaussian mixture models and the EM algorithm}
+\author{Ramesh Sridharan\thanks{Contact: \mbox{rameshvs@csail.mit.edu}}}
+\date{}
+\begin{document}
+    \maketitle
+    These notes give a short introduction to Gaussian mixture models (GMMs) and
+    the Expectation-Maximization (EM) algorithm, first for the specific case of
+    GMMs, and then more generally. These notes assume you're familiar with basic
+    probability and basic calculus. If you're interested in the full derivation
+    (Section~\ref{sec:EM}), some familiarity with entropy and KL divergence
+    is useful but not strictly required.
+
+    The notation here is borrowed from \emph{Introduction to Probability} by
+    Bertsekas \& Tsitsiklis: random variables are represented with capital
+    letters, values they take are represented with lowercase letters, $p_X$
+    represents a probability distribution for random variable $X$, and $p_X(x)$
+    represents the probability of value $x$ (according to $p_X$). We'll also
+    use the shorthand notation $X_1^{n}$ to represent the sequence $X_1, X_2,
+    \ldots, X_n$, and similarly $x_1^n$ to represent $x_1, x_2, \ldots, x_n$.
+    These notes follow a development somewhat similar to the one in
+    \emph{Pattern Recognition and Machine Learning} by Bishop.
+
+
+    \section{Review: the Gaussian distribution}
+    If random variable $X$ is Gaussian, it has the following PDF:
+    \begin{align*}
+        p_X(x) &= \frac{1}{\sigma \sqrt{2\pi}} e^{-(x-\mu)^2/2\sigma^2}
+    \end{align*}
+    The two parameters are $\mu$, the mean, and $\sigma^2$, the variance ($\sigma$
+    is called the standard deviation).
+
+    We'll use the terms ``Gaussian'' and ``normal'' interchangeably to refer to
+    this distribution.  To save us some writing, we'll write $p_X(x) =
+    \mathcal{N}(x; \mu, \sigma^2)$ to mean the same thing (where the
+    $\mathcal{N}$ stands for normal).
+
+    \subsection{Parameter estimation for Gaussians: $\mu$}
+    \label{sec:gaussian-param}
+    Suppose we have i.i.d observations $X_1^n$ from a Gaussian distribution
+    with unknown mean $\mu$ and known variance $\sigma^2$. If we want to find
+    the maximum likelihood estimate for the parameter $\mu$, we'll find the
+    log-likelihood, differentiate, and set it to 0.
+    \begin{align*}
+        p_{X_1^n}(x_1^n)
+            &= \prod_{i=1}^n \N(x_i ; \mu, \sigma^2) 
+            = \prod_{i=1}^n \frac{1}{\sigma \sqrt{2\pi}} e^{-(x_1-\mu)^2/2\sigma^2} \\
+        \ln p_{X_1^n}(x_1^n)
+        &= \sum_{i=1}^n \ln\left(\frac{1}{\sigma \sqrt{2\pi}}\right) - \frac{1}{2\sigma^2}(x_i - \mu)^2 \\
+        \frac{d}{d\mu} \ln p_{X_1^n}(x_1^n) 
+        &= \sum_{i=1}^n \frac{1}{\sigma^2}(x_i - \mu)
+    \end{align*}
+    Setting this equal to 0, we see that the maximum likelihood estimate is
+    $\widehat{\mu} = \frac{1}{N}\sum_i x_i$: it's the average of our observed
+    samples. Notice that this estimate doesn't depend on the variance
+    $\sigma^2$! Even though we started off by saying it was known, its value
+    didn't matter.
+
+    \section{Gaussian Mixture Models}
+
+    A Gaussian mixture model (GMM) is useful for modeling data that comes from
+    one of several groups: the groups might be different from each
+    other, but data points within the same group can be well-modeled by a
+    Gaussian distribution.
+
+    \subsection{Examples}
+    For example, suppose the price of a randomly chosen paperback book is
+    normally distributed with mean $\$10.00$ and standard deviation $\$1.00$.
+    Similarly, the price of a randomly chosen hardback is normally distributed
+    with mean $\$17$ and variance $\$1.50$. Is the price of a randomly chosen
+    book normally distributed?
+
+    The answer is no. Intuitively, we can see this by looking at the
+    fundamental property of the normal distribution: it's highest near the
+    center, and quickly drops off as you get farther away.  But, the
+    distribution of a randomly chosen book is bimodal: the center of the
+    distribution is near $\$13$, but the probability of finding a book near
+    that price is lower than the probability of finding a book for a few
+    dollars more or a few dollars less. This is illustrated in
+    Figure~\ref{fig:gmm-books}.
+
+    Another example: the height of a randomly chosen man is normally
+    distributed with a mean around $5'9.5"$ and standard deviation around
+    $2.5"$. Similarly, the height of a randomly chosen woman is normally
+    distributed with a mean around $5'4.5"$ and standard deviation around
+    $2.5"$~\footnote{In the metric system, the means are about 177 cm and 164 cm,
+    and the standard deviations are about 6 cm.} Is the height of a randomly
+    chosen person normally distributed?
+
+    The answer is again no. This one is a little more deceptive: because
+    there's so much overlap between the height distributions for men and for
+    women, the overall distribution is in fact highest at the center. But it's
+    still not normally distributed: it's too wide and flat in the center (we'll
+    formalize this idea in just a moment). This is illustrated in
+    Figure~\ref{fig:gmm-heights}.
+        \begin{figure}[t]
+            \centering
+            \hspace*{\fill}
+            \subfloat[Probability density for paperback books (red), hardback books (blue),
+                and all books (black, solid)]{%
+                \includegraphics{gmm-books}
+                \label{fig:gmm-books}}
+            \hfill
+            \subfloat[Probability density for heights of women (red), heights of men (blue),
+                and all heights (black, solid)]{%
+                    \includegraphics{gmm-heights}
+                    \label{fig:gmm-heights}}
+            \caption{Two Gaussian mixture models: the component densities
+                (which are Gaussian) are shown in dotted red and blue lines,
+                while the overall density (which is not) is shown as a solid
+                black line.}
+            \hspace*{\fill}
+        \end{figure}
+    These are both examples of \emph{mixtures of Gaussians}: distributions
+    where we have several groups and the data within each group is normally
+    distributed.  Let's look at this a little more formally with heights.
+
+    \subsection{The model}
+    Formally, suppose we have people numbered $i=1, \ldots, n$. We observe
+    random variable $Y_i \in \mathbb{R}$ for each person's height, and assume
+    there's an unobserved label $C_i \in \{M, F\}$ for each person
+    representing that person's gender~\footnote{% If you're familiar with the
+        Naive Bayes model, this is somewhat similar. However, here our features
+        are always Gaussian, and in the general case of more than 1 dimension,
+    we won't assume independence of the features.}. Here, the letter $c$ stands
+    for ``class''.  In general, we can have any number of possible labels or
+    classes, but we'll limit ourselves to two for this example. We'll also
+    assume that the two groups have the same known variance $\sigma^2$, but
+    different unknown means $\mu_M$ and $\mu_F$.  The distribution for the
+    class labels is Bernoulli:
+    \begin{align*}
+        p_{C_i}(c_i) &= q^{\indicator(c_i = M)}(1-q)^{\indicator(c_i = F)}
+    \end{align*}
+    We'll also assume $q$ is known. To simplify notation later, we'll let
+    $\pi_M = q$ and $\pi_F = 1-q$, so we can write
+    \begin{align}
+        \label{eq:pc} p_{C_i}(c_i) &= \prod_{c \in \{M, F\}} \pi_c^{\indicator(c_i = c)}
+    \end{align}
+
+    The conditional distributions within each class are Gaussian:
+    \begin{align}
+        \label{eq:pygivenc} p_{Y_i|C_i}(y_i | c_i)
+            &= \prod_{c} \N(y_i ; \mu_c , \sigma^2)^{\indicator(c_i = c)}
+    \end{align}
+    \subsection{Parameter estimation: a first attempt}
+    \label{sec:parameter-estimation-attempt}
+    Suppose we observe i.i.d.\ heights $Y_1 = y_1, \ldots, Y_n = y_n$, and we want to
+    find maximum likelihood estimates for the parameters $\mu_M$ and $\mu_F$.
+    This is an \emph{unsupervised learning} problem: we don't get to observe
+    the male/female labels for our data, but we want to learn parameters based
+    on those labels~\footnote{Note that in a truly unsupervised setting, we
+        wouldn't be able to tell which one of the two was male and which was
+        female: we'd find two distinct clusters and have to label them based on
+        their values after the fact.}
+
+    \noindent \textbf{Exercise}: Given the model setup in~\eqref{eq:pc}
+    and~\eqref{eq:pygivenc}, compute the joint density of all the data points
+    $p_{Y_1, \ldots, Y_N}(y_1, \ldots, y_n)$ in terms of $\mu_M$, $\mu_F$,
+    $\sigma$, and $q$. Take the log to find the log-likelihood, and then
+    differentiate with respect to $\mu_M$. Why is this hard to optimize?
+
+    \noindent \textbf{Solution}: We'll start with the density for a single data
+    point $Y_i = y_i$:
+    \begin{align*}
+        p_{Y_i}(y_i) 
+        &= \sum_{c_i} p_{C_i}(c_i) p_{Y_i|C_i}(y_i | c_i) \\
+        &= \sum_{c_i} \left(\pi_c \N(y_i; \mu_C, \sigma^2)\right)^{\indicator(c_i = c)} \\
+        &= q\N(y_i; \mu_M, \sigma^2) + (1-q)\N(y_i; \mu_F, \sigma^2)
+    \end{align*}
+    Now, the joint density of all the observations is:
+    \begin{align*}
+        p_{Y_1^n}(y_1^n) 
+        &= \prod_{i=1}^n \left(q\N(y_i; \mu_M, \sigma^2) + (1-q)\N(y_i; \mu_F, \sigma^2) \right),
+    \end{align*}
+    and the log-likelihood of the parameters is then
+    \begin{align}
+        \label{eq:log-likelihood-marginalized} \ln p_{Y_1^n}(y_1^n) 
+        &= \sum_{i=1}^n \ln\left(\pi_M\N(y_i; \mu_M, \sigma^2) + \pi_F\N(y_i; \mu_F, \sigma^2) \right),
+    \end{align}
+    We've already run into a small snag: the sum prevents us from applying the
+    log to the normal densities inside. So, we should already be a little worried that
+    our optimization won't go as smoothly as it did for the simple mean estimation we
+    did back in Section~\ref{sec:gaussian-param}. By symmetry, we only need to look at one
+    of the means; the other will follow almost the same process. Before we dive into
+    differentiating, we note that
+    \begin{align*}
+        \frac{d}{d\mu} \N(x; \mu, \sigma^2) 
+        &= \frac{d}{d\mu} \left[\frac{1}{\sigma\sqrt{2\pi}} e^{-\frac{(x-\mu)^2}{2\sigma^2}} \right] \\
+        &=  \frac{1}{\sigma\sqrt{2\pi}} e^{-\frac{(x-\mu)^2}{2\sigma^2}} \cdot \frac{2(x-\mu)}{2\sigma^2} \\
+        &=  \mathcal{N}(x ; \mu, \sigma^2) \cdot \frac{(x-\mu)}{\sigma^2}
+    \end{align*}
+    Differentiating~\eqref{eq:log-likelihood-marginalized} with respect to $\mu_M$, we obtain
+    \begin{align}
+        \label{eq:derivative}
+            \sum_{i=1}^n \frac{1}{\pi_M\N(y_i; \mu_M, \sigma^2) + \pi_F\N(y_i; \mu_F, \sigma^2)} \pi_M \N(y_i; \mu_M, \sigma^2) \frac{y_i-\mu_M}{\sigma^2} &= 0
+    \end{align}
+    At this point, we're stuck. We have a mix of ratios of exponentials and
+    linear terms, and there's no way we can solve this in closed form to get a
+    clean maximum likelihood expression!
+
+    \subsection{Using hidden variables and the EM Algorithm}
+    Taking a step back, what would make this computation easier? If we knew the
+    hidden labels $C_i$ exactly, then it would be easy to do ML estimates for
+    the parameters: we'd take all the points for which $C_i = M$ and use those
+    to estimate $\mu_M$ like we did in Section~\ref{sec:gaussian-param}, and
+    then repeat for the points where $C_i = F$ to estimate $\mu_F$.  Motivated
+    by this, let's try to compute the distribution for $C_i$ given the
+    observations. We'll start with Bayes' rule:
+    \begin{align}
+        \notag p_{C_i | Y_i}(c_i | y_i) &= \frac{p_{Y_i | C_i}(y_i | c_i) p_{C_i}(c_i)}{p_{Y_i}(y_i)} \\
+        \label{eq:qc-general} &= \frac{ \prod_{c \in \{M, F\}} \left(\pi_c \N(y_i ; \mu_c, \sigma^2)\right)^{\indicator(c = c_i)}}{\pi_M\N(y_i; \mu_M, \sigma^2) + \pi_F\N(y_i; \mu_F, \sigma^2)} = q_{C_i}(c_i) \\
+        \intertext{Let's look at the posterior probability that $C_i = M$:}
+        \label{eq:qc} p_{C_i | Y_i}(M | y_i) &= \frac{\pi_M \N(y_i ; \mu_M, \sigma^2)}{\pi_M\N(y_i; \mu_M, \sigma^2) + \pi_F\N(y_i; \mu_F, \sigma^2)} = q_{C_i}(M)
+    \end{align}
+    This should look very familiar: it's one of the terms
+    in~\eqref{eq:derivative}!  And just like in that equation, we have to know
+    all the parameters in order to compute this too. We can
+    rewrite~\eqref{eq:derivative} in terms of $q_{C_i}$, and cheat a little by
+    pretending it doesn't depend on $\mu_M$:
+    \begin{equation}
+        \label{eq:pre-m-step} \sum_{i=1}^n q_{C_i}(M) \frac{y_i-\mu_M}{\sigma^2} = 0 \\
+    \end{equation}
+    \begin{align}
+        \label{eq:weighted-average} \mu_M &= \frac{\displaystyle \sum_{i=1}^n q_{C_i}(M) y_i}{\displaystyle \sum_{i=1}^n q_{C_i}(M)}
+    \end{align}
+    This looks much better: $\mu_M$ is a weighted average of the heights, where each
+    height is weighted by how likely that person is to be male. By symmetry, for
+    $\mu_F$, we'd compute the weighted average with weights $q_{C_i}(F)$.
+
+    So now we have a circular setup: we could easily compute the posteriors
+    over $C_1^n$ if we knew the parameters, and we could easily estimate the
+    parameters if we knew the posterior over $C_1^n$. This naturally suggests
+    the following strategy: we'll fix one and solve for the other.  This
+    approach is generally known as the \emph{EM algorithm}. Informally, here's
+    how it works:
+    \begin{itemize}
+        \item First, we fix the parameters (in this case, the means $\mu_M$ and $\mu_F$ of
+            the Gaussians) and solve for the posterior distribution for the hidden
+            variables (in this case, $q_{C_i}$, the class labels). This is done
+            using~\eqref{eq:qc}.
+        \item Then, we fix the posterior distribution for the hidden variables
+            (again, that's $q_{C_i}$, the class labels), and optimize the
+            parameters (the means $\mu_M$ and $\mu_F$) using the expected
+            values of the hidden variables (in this case, the probabilities
+            from $q_{C_i}$). This is done using~\eqref{eq:derivative}.
+        \item Repeat the two steps above until the values aren't changing much
+            (i.e., until convergence).
+    \end{itemize}
+    Note that in order to get the process started, we have to initialize the
+    parameters somehow. In this setting, the initialization matters a lot! For
+    example, suppose we set $\mu_M = 3'$ and $\mu_F = 5'$. Then the computed
+    posteriors $q_{C_i}$ would all favor $F$ over $M$ (since most people are
+    closer to $5'$ than $3'$), and we would end up computing $\mu_F$ as roughly
+    the average of all our heights, and $\mu_M$ as the average of a few short
+    people.
+
+    \pagebreak
+    \section{The EM Algorithm: a more formal look}
+    \label{sec:EM}
+
+    \paragraph{\textbf{Note:}} This section assumes you have a basic
+    familiarity with measures like entropy and KL divergence, and how they
+    relate to expectations of random variables. You can still understand the
+    algorithm itself without knowing these concepts, but the derivations depend
+    on understanding them.
+
+    By this point you might be wondering what the big deal is: the algorithm
+    described above may sound like a hack where we just arbitrarily fix some
+    stuff and then compute other stuff. But, as we'll show in a few short
+    steps, the EM algorithm is actually maximizing a lower bound on the log
+    likelihood (in other words, each step is guaranteed to improve our answer
+    until convergence). A bit more on that later, but for now let's look at how
+    we can derive the algorithm a bit more formally.
+
+    Suppose we have observed a random variable $Y$.  Now suppose we also have
+    some hidden variable $C$ that $Y$ depends on.  Let's say that the
+    distributions of $C$ and $Y$ have some parameters $\theta$ that we don't
+    know, but are interested in finding.
+
+    In our last example, we observed heights $Y = \{Y_1, \ldots, Y_n\}$ with
+    hidden variables (gender labels) $C = \{C_1, \ldots, C_n\}$ (with i.i.d.\
+    structure over $Y$ and $C$), and our parameters $\theta$ were $\mu_M$ and
+    $\mu_F$, the mean heights for each group.
+
+    Before we can actually derive the algorithm, we'll need a key fact: Jensen's
+    inequality. The specific case of Jensen's inequality that we need
+    says that:
+    \begin{align}
+        \label{eq:jensen-log}\log(\mathbb{E}[X]) \geq \mathbb{E}[\log(X)]
+    \end{align}
+    For a geometric intuition of why this is true, see Figure~\ref{fig:jensen}.
+    For a proof and more detail, see
+    Wikipedia~\footnote{\url{http://en.wikipedia.org/wiki/Jensen_inequality}}~\footnote{This
+        figure is based on the one from the Wikipedia article, but for a
+    concave function instead of a convex one.}.
+    \begin{figure}[t]
+        \centering
+            \hspace*{\fill}
+            \includegraphics{px_only.pdf}
+            \hfill
+            \includegraphics{px_log.pdf}
+            \hfill
+            \includegraphics{px_pz_full.pdf}
+            \hspace*{\fill}
+        \caption{An illustration of a special case of Jensen's inequality:
+            for any random variable $X$, $\mathbb{E}[\log X] \geq \log \mathbb{E}[X]$. Let
+            $X$ be a random variable with PDF as shown in red. Let
+            $Z=\log X$. The center and right figures show how to construct
+            the PDF for $Z$ (shown in blue): because of the log, it's skewed towards
+            smaller values compared to the PDF for $X$. $\log\mathbb{E}[X]$ is the point given by the
+            center dotted black line, or $\E{X}$. But $\E{\log X}$, or 
+            $\E{Z}$, will always be smaller (or at least will never be larger) because the log ``squashes''
+            the bigger end of the distribution (where $Z$ is larger) and ``stretches'' the smaller
+            end (where $Z$ is smaller).}
+        \label{fig:jensen}
+    \end{figure}
+
+    Now we're ready to begin: Section~\ref{sec:em-short} goes through the
+    derivation quickly, and Section~\ref{sec:em-long} goes into more detail
+    about each step.
+    \subsection{The short verion}
+    \label{sec:em-short}
+    We want to maximize the log-likelihood:
+    \begin{align*}
+        \log p_Y(y; \theta) \\
+        \scriptsize{\text{(Marginalizing over $C$ and introducing $q_C(c)/q_C(c)$)}}\quad
+            &= \log\left(\sum_c q_C(c) \frac{p_{Y,C}(y,c; \theta)}{q_C(c)}\right) \\
+            \scriptsize{\text{(Rewriting as an expectation)}}\quad
+            &= \log\left(\mathbb{E}_{q_C}\left[\frac{p_{Y,C}(y,C; \theta)}{q_C(C)}\right]\right)\\
+            \scriptsize{\text{(Using Jensen's inequality)}}\quad
+            &\geq \mathbb{E}_{q_C}\left[\log \frac{p_{Y,C}(y,C; \theta)}{q_C(C)} \right]
+    \end{align*}
+    Let's rearrange the last version:
+    \begin{align*}
+        \mathbb{E}_{q_C}\left[\log \frac{p_{Y,C}(y,C; \theta)}{q_C(C)} \right]
+        &= \mathbb{E}_{q_C}\left[\log p_{Y,C}(y,C; \theta)\right] - \mathbb{E}_{q_C} [q_C(C)]
+    \end{align*}
+    Maximizing with respect to $\theta$ will give us:
+    \begin{equation*}
+        \boxed{\widehat{\theta} \gets \argmax_\theta \mathbb{E}_{q_C}\left[\log p_{Y,C}(y,C; \theta)\right]}
+    \end{equation*}
+    That's the M-step. Now we'll rearrange a different way:
+    \begin{align*}
+        \mathbb{E}_{q_C}\left[\log \frac{p_{Y,C}(y,C; \theta)}{q_C(C)} \right] 
+        &= \mathbb{E}_{q_C}\left[\log \frac{p_{Y}(y; \theta)p_{C|Y}(C|y; \theta)}{q_C(C)} \right] \\
+        &= \log p_{Y}(y; \theta) - \mathbb{E}_{q_C}\left[\log \frac{q_C(C)}{p_{C|Y}(C|y; \theta)}\right] \\
+        &= \log p_{Y}(y; \theta) - D(q_C(\cdot)||p_{C|Y}(\cdot|y; \theta))
+    \end{align*}
+    Maximizing with respect to $q_C$ will give us:
+    \begin{equation*}
+        \boxed{\widehat{q}_C(\cdot) \gets p_{C|Y}(\cdot|y; \theta)}
+    \end{equation*}
+    That's the E-step.
+
+    \subsection{The long version}
+    \label{sec:em-long}
+    We'll try to do maximum likelihood. Just like we did earlier, we'll try to
+    compute the log-likelihood by marginalizing over $C$:
+    \begin{align}
+        \notag \log p_Y(y; \theta) 
+        &= \log\left(\sum_c p_{Y,C}(y,c)\right)
+    \end{align}
+    Just like in Section~\ref{sec:parameter-estimation-attempt}, we're stuck
+    here: we can't do much with a log of a sum.  Wouldn't it be nice if we
+    could swap the order of them? Well, an expectation is a special kind of
+    sum, and Jensen's inequality lets us swap them if we have an expectation.
+    So, we'll introduce a new distribution $q_C$ for the hidden variable $C$:
+    \begin{align}
+        \log p_Y(y; \theta) 
+        \notag &= \log\left(\sum_c q_C(c) \frac{p_{Y,C}(y,c; \theta)}{q_C(c)}\right) \\
+        \notag &= \log\left(\mathbb{E}_{q_C}\left[\frac{p_{Y,C}(y,C; \theta)}{q_C(C)}\right]\right) \\
+        \label{eq:em-core-theta} &\geq \mathbb{E}_{q_C}\left[\log \frac{p_{Y,C}(y,C; \theta)}{q_C(C)} \right] \\
+        \label{eq:em-core-q} &= \mathbb{E}_{q_C}\left[\log \frac{p_{Y}(y; \theta)p_{C|Y}(C|y; \theta)}{q_C(C)} \right]
+    \end{align}
+    Now we have a lower bound on $\log p_Y(y; \theta)$ that we can optimize
+    pretty easily. Since we've introduced $q_C$, we now want to maximize
+    this quantity with respect to both $\theta$ and $q_C$.
+
+    We'll use~\eqref{eq:em-core-theta} and~\eqref{eq:em-core-q}, respectively, to
+    do the optimizations separately. First, using~\eqref{eq:em-core-theta} to find the
+    best parameters:
+    \begin{align*}
+        \mathbb{E}_{q_C}\left[\log \frac{p_{Y,C}(y,C; \theta)}{q_C(C)} \right]
+        &= \mathbb{E}_{q_C}\left[\log p_{Y,C}(y,C; \theta)\right] - \mathbb{E}_{q_C} [q_C(C)]
+    \end{align*}
+    In general, $q_C$ doesn't depend on $\theta$, so we'll only care about the first term:
+    \begin{equation}
+        \label{eq:m-step} \boxed{\widehat{\theta} \gets \argmax_\theta \mathbb{E}_{q_C}\left[\log p_{Y,C}(y,C; \theta)\right]}
+    \end{equation}
+    This is called the \emph{M-step}: the M stands for maximization, since we're
+    maximizing with respect to the parameters.
+    Now, let's find the best $q_C$ using~\eqref{eq:em-core-q}.
+    \begin{align}
+        \notag \mathbb{E}_{q_C}\left[\log \frac{p_{Y}(y; \theta)p_{C|Y}(C|y; \theta)}{q_C(C)} \right]
+        &= \mathbb{E}_{q_C}[\log p_{Y}(y; \theta)] + \mathbb{E}_{q_C}\left[\log \frac{p_{C|Y}(C|y; \theta)}{q_C(C)}\right] \\
+        \intertext{The first term doesn't depend on $c$, and the second term almost looks like a KL divergence:}
+        \notag &= \log p_{Y}(y; \theta) - \mathbb{E}_{q_C}\left[\log \frac{q_C(C)}{p_{C|Y}(C|y; \theta)}\right] \\
+        \label{eq:e-step-divergence} &= \log p_{Y}(y; \theta) - D(q_C(\cdot)||p_{C|Y}(\cdot|y; \theta))~\footnotemark
+    \end{align}
+        \footnotetext{Remember that this is a lower bound
+            on $\log p_Y(y; \theta)$: that is, $\log p_Y(y; \theta) \geq \log p_{Y}(y; \theta) - D(q_C(\cdot)||p_{C|Y}(\cdot|y; \theta))$.
+            From this, we can see that the ``gap'' in the lower bound comes entirely from the KL divergence term.}
+    So, when maximizing this quantity, we want to make the KL divergence as
+    small as possible. KL divergences are always greater than or equal to 0,
+    and they're exactly 0 when the two distributions are equal. So, the optimal
+    $q_C$ is $p_{C|Y}(c|y; \theta)$:
+    \begin{equation}
+        \label{eq:e-step} \boxed{\widehat{q}_C(c) \gets p_{C|Y}(c|y; \theta)}
+    \end{equation}
+    This is called the \emph{E-step}: the E stands for expectation, since we're
+    computing $q_C$ so that we can use it for expectations.
+    So, by alternating between~\eqref{eq:m-step} and~\eqref{eq:e-step}, we can
+    maximize a lower bound on the log-likelihood. We've also seen from~\eqref{eq:e-step}
+    that the lower bound is tight (that is, it's equal to the log-likelihood)
+    when we use~\eqref{eq:e-step}.
+
+    \subsection{The algorithm}
+
+    \noindent \hrulefill
+        \begin{algorithmic}[1]
+            \Require{Observation $y$, joint distribution $p_{Y,C}(y,c; \theta)$, conditional distribution
+                $p_{C|Y}(c|y; \theta)$, initial values $\theta^{(0)}$}
+            \Statex
+            \Function{EM}{$p_{Y,C}(y,c; \theta), p_{C|Y}(c|y; \theta), \theta^{(0)}$}
+                \For{iteration $t \in 1,2,\ldots$}
+                    \State{$q_C^{(t)} \gets p_{C|Y}(c|y; \theta^{(t-1)})$ (\textbf{E-step})}
+                    \State{$\theta^{(t)} \gets \argmax_\theta \mathbb{E}_{q^{(t)}_C} \left[p_{Y,C}(y, C; \theta)\right]$(\textbf{M-step})}
+                    \If{$\theta^{(t)} \approx \theta^{(t-1)}$}
+                        \State{return $\theta^{(t)}$}
+                    \EndIf
+                \EndFor
+            \EndFunction
+        \end{algorithmic}
+    \hrulefill
+
+    \subsection{Example: Applying the general algorithm to GMMs}
+    Now, let's revisit our GMM for heights and see how we can apply the two
+    steps. We have the observed variable $Y = \{Y_1, \ldots, Y_n\}$, and the
+    hidden variable $C = \{C_1, \ldots, C_n\}$. For the E-step, we have to
+    compute the posterior distribution $p_{C|Y}(c|y)$, which we already did
+    in~\eqref{eq:qc-general} and~\eqref{eq:qc}. For the M-step, we have to
+    compute the expected joint probability.
+    \begin{align*}
+        \mathbb{E}_{q_C}[\ln p_{Y,C}(y,C)]
+        &= \mathbb{E}_{q_C}[\ln p_{Y|C}(y|C)p_C(C)] \\
+        &= \mathbb{E}_{q_C}\left[\ln \prod_{i=1}^n \prod_{c \in \{M, F\}} \left(\pi_c\N(y_i; \mu_c, \sigma^2)\right)^{\indicator(C_i = c)}\right] \\
+        &= \mathbb{E}_{q_C}\left[ \sum_{i=1}^n \sum_{c \in \{M, F\}} \indicator(C_i = c) \left(\ln \pi_c + \ln \N(y_i; \mu_c, \sigma^2)\right)\right] \\
+        &=  \sum_{i=1}^n \sum_{c \in \{M, F\}} \mathbb{E}_{q_C}\left[\indicator(C_i = c)\right] \left(\ln \pi_c + \ln \frac{1}{\sigma\sqrt{2\pi}} - \frac{(y_i-\mu_c)^2}{2\sigma^2} \right)
+    \end{align*}
+    $\mathbb{E}_{q_C}\left[\indicator(C_i = c)\right]$ is the
+    probability that $C_i$ is $c$, according to $q$. Now, we can differentiate
+    with respect to $\mu_M$:
+    \begin{align*}
+        \frac{d}{d\mu_M} \mathbb{E}_{q_C}[\ln p_{Y|C}(y|C)p_C(C)]
+        &= \sum_{i=1}^n q_{C_i}(M) \left(\frac{y_i-\mu_M}{\sigma^2}\right) = 0
+    \end{align*}
+    This is exactly the same as what we found earlier in~\eqref{eq:pre-m-step},
+    so we know the solution will again be the weighted average
+    from~\eqref{eq:weighted-average}:
+    \begin{align*}
+        \mu_M &= \frac{\displaystyle \sum_{i=1}^n q_{C_i}(M) y_i}{\displaystyle \sum_{i=1}^n q_{C_i}(M)}
+    \end{align*}
+    Repeating the process for $\mu_F$, we get
+    \begin{align*}
+        \mu_F &= \frac{\displaystyle \sum_{i=1}^n q_{C_i}(F) y_i}{\displaystyle \sum_{i=1}^n q_{C_i}(F)}
+    \end{align*}
+\end{document}

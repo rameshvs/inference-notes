@@ -1,0 +1,315 @@
+\documentclass[12pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{epsfig}
+\usepackage{amsfonts}
+\usepackage[mathcal]{euscript} 
+\usepackage[tbtags]{amsmath}
+\usepackage{amssymb}
+\usepackage{mathrsfs}
+\usepackage{import}
+\usepackage{hyperref}
+\usepackage{minted}
+\usepackage{enumerate}
+
+\input{../defs.tex}
+
+\newcommand{\cond}[1]{\textbf{\textcolor{blue}{#1}}}
+\title{Basic Probability Notes}
+\author{Ramesh Sridharan\thanks{Contact: \mbox{rameshvs@csail.mit.edu}}}
+\date{}
+
+\begin{document}
+    \maketitle
+    These notes give a review of basic probability, focusing on a few important
+    concepts.  For a more thorough treatment, see any introductory probability
+    book; I recommend \emph{Introduction to Probability} by Bertsekas \& Tsitsiklis.
+    \section*{Probability review}
+    Here's our setup: we have \textsl{experiments} which generate
+    \textsl{outcomes}.  The \textsl{sample space} is the set of all outcomes of
+    an experiment.  \textsl{Events} are subsets of the sample space (which can
+    possibly be empty). A \textsl{probability distribution} assigns
+    probabilities to events, and must satisfy the three axioms of
+    nonnegativity, additivity, and normalization.
+
+    \textsl{Conditioning} on an event means we have observed that event
+    occuring.  This gives a new probability distribution; it can be thought of
+    as restricting the universe of possibilities to those outcomes which
+    satisfy the condition.
+
+    Two events $A$ and $B$ are defined to be \textsl{independent} if $\P(A|B) =
+    \P(A)$, or equivalently if $\P(A \cap B) = \P(A)\P(B)$. Intuitively, two
+    events are independent if knowing one does not change the probability of
+    the other one occurring.
+
+    \textsl{Bayes' rule} states that
+    \begin{align*}
+        \P(A|B) &= \frac{\overbrace{\P(B|A)}^{\text{``likelihood''}}\overbrace{\P(A)}^{\text{``prior''}}}{\P(B)}.
+    \end{align*}
+    Typically, $B$ is an observed event and $A$ is an event representing the
+    hidden state of the world (so $P(A|B)$ is our belief about the hidden
+    state of the world given our observations). Our problem-specific model will
+    provide likelihood and prior distributions $P(B|A)$ and $P(A)$
+    respectively. Computing the denominator often requires the use of total
+    probability (or, in the case of random variables, marginalization), and can
+    sometimes be computationally intractable.
+
+    The law of \textsl{total probability} states that given events $A_1,
+    \ldots, A_n$ that are disjoint (i.e., they don't overlap) and exhaustive
+    (i.e., they cover the entire sample space when combined), we can write
+    \begin{align*}
+        \P(B) &= \sum_{i=1}^n \P(B|A_i) \P(A_i)
+    \end{align*}
+    This is useful when $\P(B)$ is difficult to compute, but $\P(B|A_i)$ is easier.
+
+    Also recall that the notation $A^c$ refers to the complement of an event.
+
+    \subsection*{Basic combinatorics}
+
+    Suppose we wish to form a 4-letter string using the letters of the
+    alphabet. Suppose we require that the letters must be different (i.e.\ we
+    sample them \textit{without replacement}).  Then, there are 26
+    possibilities for the first letter, and for each of those, there are 25
+    possibilities for the second letter, and so on.  So, the number of possible
+    strings is given by $26 \cdot 25 \cdot 24 \cdot 23$.
+
+    In general, a length-$k$ \textbf{permutation} of $n$ elements is an ordered
+    collection of $k$ of the $n$ elements. There are $\frac{n!}{(n-k)!}$
+    different ways to construct such a permutation. In this example, $n=26$
+    letters of the alphabet and $k=4$ letters, so the formula gives us $26!/22!
+    = 26 \cdot 25 \cdot 24 \cdot 23$.
+
+    When we are not concerned with order, we can simply take the number of
+    permutations and divide by the number of ways to reorder the $k$ elements,
+    $k!$. This gives $\frac{n!}{k!(n-k)!}$.
+
+    In our earlier example, if we didn't care about order, we would divide by
+    the number of ways to rearrange the 4 letters (which is $4! = 4 \cdot 3 \cdot
+    2$). Our final answer would then be $\frac{26!}{22! \cdot 4!} = \frac{26
+    \cdot 25 \cdot 24 \cdot 23}{4 \cdot 3 \cdot 2}$.
+
+    \clearpage
+    \section*{Problems}
+
+    \example{1}{%
+        A family has two children. For each piece of information below,
+        determine the probability that both children are boys given that piece
+        of information. For this problem, assume that every child is
+        equally likely to be a boy or a girl, and the genders of the two
+        children are independent.
+        \begin{enumerate}[(a)]
+            \item No information (i.e.\ compute the unconditional probability that both children are boys).
+            \item The younger child is a boy.
+            \item At least one child is a boy.
+            \item At least one child is a boy born on a Tuesday. Assume each
+            child is equally likely to be born on any day of the week.
+        \end{enumerate}
+    }{%
+    This problem was posed by Gary Foshee at a gathering of puzzle enthusiasts.
+    You can find lots of discussion about it online~\footnote{See
+    \href{http://www.newscientist.com/article/dn18950-magic-numbers-a-meeting-of-mathemagical-tricksters.html}{the
+    New Scientist article} or \href{http://wmbriggs.com/blog/?p=2553}{a useful
+    blog post}}.
+    \begin{enumerate}[(a)]
+        \item This is simply the probability of two independent events, each of which occurs with
+            probability $1/2$. Therefore, the probability is $\frac{1}{4}$.
+        \item Carefully examining the sample space, we see that there are 4 possible outcomes:
+            \begin{table}[h!]
+                \centering
+                \begin{tabular}{|c|c|}
+                    \hline
+                    First child & Second child \\ \hline
+                    \cond{Boy} & \cond{Boy} \\ \cond{Boy} & \cond{Girl} \\ Girl & Boy \\ Girl & Girl \\ \hline
+                \end{tabular}
+            \end{table}
+
+            Using computations similar to those in (a), we can see that all 4
+            possibilities are equally likely. If we observe that the younger
+            child is a boy, we can eliminate the third and fourth
+            possibilities. One out of the two remaining possibilities satisfies
+            the event we are looking for (``both children are boys''). So, the
+            probability is $\frac{1}{2}$.
+        \item Once again, we can write out the entire sample space:
+            \begin{table}[h!]
+                \centering
+                \begin{tabular}{|c|c|}
+                    \hline
+                    First child & Second child \\ \hline
+                    \cond{Boy} & \cond{Boy} \\ \cond{Boy} & \cond{Girl} \\ \cond{Girl} & \cond{Boy} \\ Girl & Girl \\ \hline
+                \end{tabular}
+            \end{table}
+
+            Here, our conditioning event, ``at least one child is a boy,'' only
+            eliminates one possibility, leaving 3 equally likely candidates.
+            Once again, only the first out of the three satisfies the event
+            we're looking for. So, the probability is $\frac{1}{3}$.
+        \item In order to write out the full sample space for this problem,
+            we'd need 196 entries: there are 14 possibilities for the first child,
+            and for each of those, 14 possibilities for the second.  So, we'll
+            solve a simpler problem: suppose babies can only be born on Tuesdays
+            and Wednesdays.  Using B, G, T, and W to abbreviate boy, girl, Tuesday
+            and Wednesday respectively, the sample space is:
+            \begin{table}[h!]
+                \centering
+                \begin{tabular}{|c|c|}
+                    \hline
+                    First child & Second child \\ \hline
+                    \cond{B,T} & \cond{B,T} \\
+                    \cond{B,T} & \cond{B,W} \\
+                    \cond{B,T} & \cond{G,T} \\
+                    \cond{B,T} & \cond{G,W} \\
+                    \hline
+                    \cond{B,W} & \cond{B,T} \\
+                    B,W & B,W \\
+                    B,W & G,T \\
+                    B,W & G,W \\
+                    \hline
+                    \cond{G,T} & \cond{B,T} \\
+                    G,T & B,W \\
+                    G,T & G,T \\
+                    G,T & G,W \\
+                    \hline
+                    \cond{G,W} & \cond{B,T} \\
+                    G,W & B,W \\
+                    G,W & G,T \\
+                    G,W & G,W \\
+                    \hline
+                \end{tabular}
+            \end{table}
+
+            The 7 bolded entries satisfy the event we're conditioning on: that
+            one of the children is a boy born on a Tuesday. Out of these, only
+            3 (the first two and the fifth) correspond to two-boy families.
+            Therefore, the probability is $\frac{3}{7}$.
+
+            While the sample space for the full problem is too large to write
+            out easily, we can extend this reasoning to obtain the final answer
+            $\frac{13}{27}$. I encourage you to try arriving at this answer for
+            yourself!
+
+    \end{enumerate}
+    In case you don't believe the answer (as I didn't the first time I
+    heard this puzzle), one thing you can always do is to simulate it.
+    The following python code (also available from the same place you
+    found these notes) simulates this problem:
+
+    \inputminted[linenos,frame=lines,framesep=1mm]{python}{probability.py}
+    One way to view these problems is on an ``information spectrum:'' In each
+    situation, we are given some information about the family, and asked for
+    the probability of having two boys. This probability was smallest in (a),
+    where we were given no information. As we are given more and
+    more information, the probability of this event increases: part (c)
+    provides a small amount of information, part (d) provides a little more,
+    and part (b) provides even more still. Our smaller problem in part (d)
+    doesn't provide as much information as the full problem: we only eliminate
+    half the possible days the child could have been born on. However, the full
+    problem eliminates $6/7$ of the days by telling us that the boy was born on
+    a Tuesday.}
+
+    \example{2}{%
+        You have an urgent assignment due in only a few minutes. You know
+        it's in one of your drawers, but you're not sure which one.  The
+        probability that the assignment is in drawer $k$ is $D_k$.  If drawer
+        $k$ has the assignment and you search there, you have probability
+        $p_k$ of finding it.
+
+        Suppose you search drawer $i$ and do not find the assignment. Like any
+        good student, you decide to spend your little remaining time computing
+        probabilities:
+        \begin{enumerate}[(a)]
+            \item Find the probability that the paper is in drawer $j$, where $j \neq i$.
+            \item Find the probability that the paper is in drawer $i$.
+        \end{enumerate}
+    }{%
+        Let $A_k$ be the event that the assignment is in drawer $k$, and $B_k$ be
+        the event that you find the assignment in drawer $k$.
+        \begin{enumerate}[(a)]
+            \item We'll express the desired probability as $\P(A_j|B_i^c)$. Since
+                this quantity is difficult to reason about directly, we'll use
+                Bayes' rule:
+                \begin{align*}
+                    %\overbrace{\P(A_j|B_i^c)}{\text{Prob. assignment in drawer $j$ given it wasn't found in drawer $i$}} &= \frac{\P(B_i^c | A_j) \P(A_j)}{\P(B_i)}
+                    \P(A_j|B_i^c) &= \frac{\P(B_i^c | A_j) \P(A_j)}{\P(B_i^c)}
+                \end{align*}
+                The first probability in the fraction, $\P(B_i^c | A_j)$, expresses
+                the probability of not finding the assignment in drawer $i$ given
+                that it's in a different drawer $j$. Since it's impossible to find
+                the paper in a drawer it isn't in, this is just 1.
+
+                The second probability, $\P(A_j)$, is given to us in the problem
+                statement as $D_j$.
+
+                The third probability, $\P(B_i^c) = 1-\P(B_i)$, is difficult to
+                reason about directly. But, if we knew whether or not the paper was
+                in the drawer, it would become easier. So, we'll use total
+                probability:
+                \begin{align*}
+                    \P(B_i) &= \overbrace{\P(B_i|A_i)}^{\text{prob.\ of finding in $i$ if in $i$}}\underbrace{\P(A_i)}_{\text{prob.\ of being in $i$}} + \overbrace{\P(B_i|A_i^c)}^{\text{prob.\ of finding in $i$ if not in $i$}}\underbrace{\P(A_i^c)}_{\text{prob.\ of not being in $i$}}\\
+                    &= p_i D_i + 0 (1-D_i)
+                \end{align*}
+                Putting these terms together, we find that
+                \begin{align*}
+                    \P(A_j|B_i^c) &= \frac{D_j}{1-p_iD_i}
+                \end{align*}
+            \item Similarly, we'll use Bayes' rule:
+                \begin{align*}
+                    \P(A_i | B_i^c) &= \frac{\P(B_i^c | A_i) \P(A_i)}{\P(B_i)} = \frac{(1-p_i) D_i}{1 - p_i D_i}
+                \end{align*}
+        \end{enumerate}
+    }
+    \example{3}{%
+        Suppose you have $n$ ball-filled urns, numbered $1$ through $n$. Urn
+        $i$ has exactly $i-1$ green balls and $n-i$ red balls.
+        \begin{enumerate}[(a)]
+            \item You choose an urn uniformly at random, and draw a ball
+                without looking at it. What is the probability that the ball you drew is green?
+            \item You then look at the ball and see that it is green. You draw
+                another ball from the same urn. What is the probability that
+                the second ball is green?
+        \end{enumerate}
+    }{%
+    \begin{enumerate}[(a)]
+        \item Let $N_\text{red}$ be the total number of red balls, and $N_\text{green}$ be the
+            total number of green balls. 
+            \begin{align*}
+                N_\text{red} &= \sum_{i=1}^n (i-1) = \frac{1}{2}n(n+1) - n = n^2-n,  \\
+                N_\text{green} &= \sum_{i=1}^n (n-i) = n^2 - \frac{1}{2}n(n+1) = n^2-n, 
+            \end{align*}
+            where the summations come from the formula $\sum_{i=1}^n i = \frac{1}{2}n(n+1)$.
+
+            Since the urns all have an equal number of balls, randomly choosing
+            an urn and then randomly choosing a ball is equivalent to randomly
+            choosing a ball from all the balls (convince yourself that this is
+            true!). So, the probability is $1/2$. This answer should also make
+            intuitive sense: since red and green are completely symmetric here,
+            the answer should be the same for red as it is for green: the only
+            way for that to be true is for both to be $1/2$.
+        \item This question would be much easier if we knew which urn the balls
+            came from. So, we'll use total probability to condition on that information. Let
+            $G_k$ be the event that the $k$th ball drawn is green, and $U_i$ be the
+            event that they were drawn from the $i$th urn. Then the $U_i$s are
+            disjoint, exhaustive events:
+            \begin{align*}
+                \P(G_2 | G_1) &= \frac{\P(G_2 \cap G_1)}{\P(G_1)} \\
+                    \text{(total probability)} 
+                        &= \frac{1}{(1/2)} \sum_{i=1}^n \P(G_2 \cap G_1 | U_i)\overbrace{\P(U_i)}^{1/n} \\
+                    \text{(Chain rule)} 
+                        &= \frac{1}{(1/2)} \sum_{i=1}^n \P(G_1|U_i)\P(G_2|G_1 \cap U_i) \cdot \frac{1}{n} \\
+                        &= \frac{1}{(1/2)} \sum_{i=1}^n \frac{i-1}{n-1} \cdot \frac{i-2}{n-2} \cdot \frac{1}{n} \\
+                        &= \frac{1}{(1/2)} \cdot \frac{1}{3} = \frac{2}{3},
+            \end{align*}
+            where the summations can be computed using a computer algebra
+            system such as Wolfram Alpha.
+
+            The key to the solution was to see that we didn't have any way of
+            directing computing probabilities of events involving $G_2$ and $G_1$, but
+            once we conditioned on $U_i$ (i.e., once we knew which urn the balls came from),
+            we could fully use the information we were given.
+
+            Note that our answer is quite a bit higher than $1/2$ even though
+            we've already taken away a green ball from our chosen urn.
+            Intuitively, this is because drawing a green ball first tells us
+            that we are more likely to have chosen an urn with a higher
+            concentration of green balls.
+    \end{enumerate}
+    }
+\end{document}
