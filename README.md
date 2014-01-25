@@ -18,6 +18,11 @@ learning concepts:
 
 You can find the notes themselves at [my website](http://people.csail.mit.edu/rameshvs/)
 
+## Compiling
+
+Run `make` from the top directory to compile everything, or to
+compile an individual document, e.g., hmms, run `make hmms`.
+
 ## Licensing
 
 Copyright (C) 2013 Ramesh Sridharan, rameshvs@csail.mit.edu.
