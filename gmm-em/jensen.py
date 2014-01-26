@@ -35,7 +35,7 @@ if __name__ == '__main__':
     plt.plot(x + x_min, px, color=template.red, linewidth=L)
 
     plt.xlabel('$x$')
-    plt.ylabel('$z = \log x')
+    plt.ylabel('$z = \log x$')
 
     plt.tight_layout()
     plt.savefig('px_only.pdf')
