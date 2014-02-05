@@ -16,7 +16,7 @@ learning concepts:
     modeling continuous data from several different groups) and the EM
     algorithm.
 
-You can find the notes themselves at [my website](http://people.csail.mit.edu/rameshvs/)
+You can find the notes themselves at [my website](http://people.csail.mit.edu/rameshvs/).
 
 ## Compiling
 
