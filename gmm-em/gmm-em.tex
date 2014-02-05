@@ -46,6 +46,7 @@
     represents the probability of value $x$ (according to $p_X$). We'll also
     use the shorthand notation $X_1^{n}$ to represent the sequence $X_1, X_2,
     \ldots, X_n$, and similarly $x_1^n$ to represent $x_1, x_2, \ldots, x_n$.
+
     These notes follow a development somewhat similar to the one in
     \emph{Pattern Recognition and Machine Learning} by Bishop.
 
@@ -298,10 +299,10 @@
     steps, the EM algorithm is actually maximizing a lower bound on the log
     likelihood (in other words, each step is guaranteed to improve our answer
     until convergence). A bit more on that later, but for now let's look at how
-    we can derive the algorithm a bit more formally.
+    we can derive the algorithm a little more formally.
 
     Suppose we have observed a random variable $Y$.  Now suppose we also have
-    some hidden variable $C$ that $Y$ depends on.  Let's say that the
+    some hidden variable $C$ that $Y$ depends on. Let's say that the
     distributions of $C$ and $Y$ have some parameters $\theta$ that we don't
     know, but are interested in finding.
 
@@ -361,7 +362,7 @@
     Let's rearrange the last version:
     \begin{align*}
         \mathbb{E}_{q_C}\left[\log \frac{p_{Y,C}(y,C; \theta)}{q_C(C)} \right]
-        &= \mathbb{E}_{q_C}\left[\log p_{Y,C}(y,C; \theta)\right] - \mathbb{E}_{q_C} [q_C(C)]
+        &= \mathbb{E}_{q_C}\left[\log p_{Y,C}(y,C; \theta)\right] - \mathbb{E}_{q_C} [\log q_C(C)]
     \end{align*}
     Maximizing with respect to $\theta$ will give us:
     \begin{equation*}
@@ -394,11 +395,13 @@
     sum, and Jensen's inequality lets us swap them if we have an expectation.
     So, we'll introduce a new distribution $q_C$ for the hidden variable $C$:
     \begin{align}
-        \log p_Y(y; \theta) 
-        \notag &= \log\left(\sum_c q_C(c) \frac{p_{Y,C}(y,c; \theta)}{q_C(c)}\right) \\
-        \notag &= \log\left(\mathbb{E}_{q_C}\left[\frac{p_{Y,C}(y,C; \theta)}{q_C(C)}\right]\right) \\
-        \label{eq:em-core-theta} &\geq \mathbb{E}_{q_C}\left[\log \frac{p_{Y,C}(y,C; \theta)}{q_C(C)} \right] \\
-        \label{eq:em-core-q} &= \mathbb{E}_{q_C}\left[\log \frac{p_{Y}(y; \theta)p_{C|Y}(C|y; \theta)}{q_C(C)} \right]
+        \log p_Y(y; \theta) \\
+        \notag \scriptsize{\text{(Marginalizing over $C$ and introducing $q_C(c)/q_C(c)$)}}\quad
+            &= \log\left(\sum_c q_C(c) \frac{p_{Y,C}(y,c; \theta)}{q_C(c)}\right) \\
+        \notag \scriptsize{\text{(Rewriting as an expectation)}}\quad
+            &= \log\left(\mathbb{E}_{q_C}\left[\frac{p_{Y,C}(y,C; \theta)}{q_C(C)}\right]\right) \\
+        \label{eq:em-core-theta} \scriptsize{\text{(Using Jensen's inequality)}}\quad &\geq \mathbb{E}_{q_C}\left[\log \frac{p_{Y,C}(y,C; \theta)}{q_C(C)} \right] \\
+        \label{eq:em-core-q} \scriptsize{\text{Using definition of conditional probability}}\quad &= \mathbb{E}_{q_C}\left[\log \frac{p_{Y}(y; \theta)p_{C|Y}(C|y; \theta)}{q_C(C)} \right]
     \end{align}
     Now we have a lower bound on $\log p_Y(y; \theta)$ that we can optimize
     pretty easily. Since we've introduced $q_C$, we now want to maximize
@@ -409,7 +412,7 @@
     best parameters:
     \begin{align*}
         \mathbb{E}_{q_C}\left[\log \frac{p_{Y,C}(y,C; \theta)}{q_C(C)} \right]
-        &= \mathbb{E}_{q_C}\left[\log p_{Y,C}(y,C; \theta)\right] - \mathbb{E}_{q_C} [q_C(C)]
+        &= \mathbb{E}_{q_C}\left[\log p_{Y,C}(y,C; \theta)\right] - \mathbb{E}_{q_C} [\log q_C(C)]
     \end{align*}
     In general, $q_C$ doesn't depend on $\theta$, so we'll only care about the first term:
     \begin{equation}
@@ -451,8 +454,8 @@
             \Statex
             \Function{EM}{$p_{Y,C}(y,c; \theta), p_{C|Y}(c|y; \theta), \theta^{(0)}$}
                 \For{iteration $t \in 1,2,\ldots$}
-                    \State{$q_C^{(t)} \gets p_{C|Y}(c|y; \theta^{(t-1)})$ (\textbf{E-step})}
-                    \State{$\theta^{(t)} \gets \argmax_\theta \mathbb{E}_{q^{(t)}_C} \left[p_{Y,C}(y, C; \theta)\right]$(\textbf{M-step})}
+                    \State{$q_C^{(t)} \gets p_{C|Y}(c|y; \theta^{(t-1)})$ \quad (\textbf{E-step})}
+                    \State{$\theta^{(t)} \gets \argmax_\theta \mathbb{E}_{q^{(t)}_C} \left[p_{Y,C}(y, C; \theta)\right]$\quad (\textbf{M-step})}
                     \If{$\theta^{(t)} \approx \theta^{(t-1)}$}
                         \State{return $\theta^{(t)}$}
                     \EndIf
